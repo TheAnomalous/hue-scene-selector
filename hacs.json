@@ -1,0 +1,8 @@
+{
+    "name": "Hue Scene Selector",
+    "render_readme": true,
+    "domains": [
+        "select"
+    ],
+    "homeassistant": "2024.1.0"
+}

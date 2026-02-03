@@ -1,0 +1,17 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Set up Hue Scene Selector",
+                "description": "This will create a dropdown selector for each room on your Hue bridge. Select which Hue bridge to use:",
+                "data": {
+                    "bridge": "Hue Bridge"
+                }
+            }
+        },
+        "abort": {
+            "no_hue_bridges": "No Hue bridges found. Please set up the Philips Hue integration first.",
+            "already_configured": "Scene selectors already configured for this bridge."
+        }
+    }
+}

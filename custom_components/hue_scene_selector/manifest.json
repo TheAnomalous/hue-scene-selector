@@ -1,0 +1,16 @@
+{
+    "domain": "hue_scene_selector",
+    "name": "Hue Scene Selector",
+    "codeowners": [
+        "@afull"
+    ],
+    "config_flow": true,
+    "dependencies": [
+        "hue"
+    ],
+    "documentation": "https://github.com/afull/hue-scene-selector",
+    "iot_class": "local_polling",
+    "issue_tracker": "https://github.com/afull/hue-scene-selector/issues",
+    "requirements": [],
+    "version": "1.0.0"
+}
