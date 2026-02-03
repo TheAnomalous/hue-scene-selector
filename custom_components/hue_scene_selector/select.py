@@ -17,17 +17,19 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-def get_hue_rooms_and_scenes(hass: HomeAssistant) -> dict[str, list[str]]:
+def get_hue_rooms_and_scenes(hass: HomeAssistant) -> dict[str, dict[str, str]]:
     """
     Discover all Hue rooms/zones and their scenes.
     
     Returns a dict like:
     {
-        "Bedroom": ["Bright", "Relax", "Nightlight", ...],
-        "Family Room": ["TV Glow", "Movie", ...],
+        "Bedroom": {"Bedroom Bright": "Bright", "Bedroom Relax": "Relax", ...},
+        "Family Room": {"Family Room TV Glow": "TV Glow", ...},
     }
+    
+    The keys are friendly names (for display), values are scene names (for activation).
     """
-    rooms: dict[str, list[str]] = {}
+    rooms: dict[str, dict[str, str]] = {}
     
     # Get all scene entities
     for state in hass.states.async_all("scene"):
@@ -55,16 +57,17 @@ def get_hue_rooms_and_scenes(hass: HomeAssistant) -> dict[str, list[str]]:
                 
                 if hass.states.get(light_entity):
                     if room_formatted not in rooms:
-                        rooms[room_formatted] = []
+                        rooms[room_formatted] = {}
                     
-                    # Use the friendly name for display
-                    if friendly_name not in rooms[room_formatted]:
-                        rooms[room_formatted].append(friendly_name)
+                    # Map friendly name -> actual scene name for the Hue bridge
+                    # The scene name is the "remaining" part, formatted nicely
+                    scene_name = remaining.replace("_", " ").title()
+                    rooms[room_formatted][friendly_name] = scene_name
                     break
     
     # Sort scenes alphabetically within each room
     for room in rooms:
-        rooms[room] = sorted(rooms[room])
+        rooms[room] = dict(sorted(rooms[room].items()))
     
     return rooms
 
@@ -86,14 +89,14 @@ async def async_setup_entry(
         return
     
     entities = []
-    for room_name, scenes in rooms_and_scenes.items():
-        if scenes:  # Only create entity if room has scenes
+    for room_name, scene_map in rooms_and_scenes.items():
+        if scene_map:  # Only create entity if room has scenes
             entities.append(
                 HueRoomSceneSelector(
                     hass=hass,
                     config_entry=config_entry,
                     room_name=room_name,
-                    initial_scenes=scenes,
+                    scene_map=scene_map,  # dict: friendly_name -> scene_name
                 )
             )
     
@@ -113,13 +116,13 @@ class HueRoomSceneSelector(SelectEntity):
         hass: HomeAssistant,
         config_entry: ConfigEntry,
         room_name: str,
-        initial_scenes: list[str],
+        scene_map: dict[str, str],  # friendly_name -> scene_name
     ) -> None:
         """Initialize the scene selector."""
         self.hass = hass
         self._config_entry = config_entry
         self._room_name = room_name
-        self._scenes = initial_scenes
+        self._scene_map = scene_map  # Maps display names to actual scene names
         self._current_option: str | None = None
         
         # Generate clean identifiers
@@ -127,7 +130,7 @@ class HueRoomSceneSelector(SelectEntity):
         
         self._attr_unique_id = f"hue_scene_selector_{room_slug}"
         self._attr_name = f"{room_name} Scenes"
-        self._attr_options = initial_scenes
+        self._attr_options = list(scene_map.keys())  # Friendly names for dropdown
         
         # Device info for grouping in the UI
         self._attr_device_info = DeviceInfo(
@@ -148,6 +151,9 @@ class HueRoomSceneSelector(SelectEntity):
         self._current_option = option
         self.async_write_ha_state()
         
+        # Get the actual scene name for the Hue bridge
+        scene_name = self._scene_map.get(option, option)
+        
         # Activate the Hue scene
         try:
             await self.hass.services.async_call(
@@ -155,13 +161,13 @@ class HueRoomSceneSelector(SelectEntity):
                 "hue_activate_scene",
                 {
                     "group_name": self._room_name,
-                    "scene_name": option,
+                    "scene_name": scene_name,
                 },
                 blocking=True,
             )
-            _LOGGER.debug(f"Activated scene '{option}' in room '{self._room_name}'")
+            _LOGGER.debug(f"Activated scene '{scene_name}' in room '{self._room_name}'")
         except Exception as err:
-            _LOGGER.error(f"Failed to activate scene '{option}' in '{self._room_name}': {err}")
+            _LOGGER.error(f"Failed to activate scene '{scene_name}' in '{self._room_name}': {err}")
 
     async def async_update(self) -> None:
         """Refresh the list of available scenes."""
@@ -170,8 +176,9 @@ class HueRoomSceneSelector(SelectEntity):
         )
         
         if self._room_name in rooms_and_scenes:
-            new_scenes = rooms_and_scenes[self._room_name]
-            if new_scenes != self._scenes:
-                self._scenes = new_scenes
-                self._attr_options = new_scenes
-                _LOGGER.debug(f"Updated scenes for {self._room_name}: {new_scenes}")
+            new_scene_map = rooms_and_scenes[self._room_name]
+            if new_scene_map != self._scene_map:
+                self._scene_map = new_scene_map
+                self._attr_options = list(new_scene_map.keys())
+                _LOGGER.debug(f"Updated scenes for {self._room_name}: {list(new_scene_map.keys())}")
+
